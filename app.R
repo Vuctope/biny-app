@@ -8,7 +8,7 @@ library(plotly)
 ui <- fluidPage(
     
     dashboardPage(
-        dashboardHeader(title = "Biny (Binance Shiny)"),
+        dashboardHeader(title = "BinyApp (Binance Shiny)"),
         dashboardSidebar(
             sidebarMenu(
                 menuItem("Wallet", tabName = "tabWallet", icon = icon("wallet")),
