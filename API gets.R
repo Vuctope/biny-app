@@ -122,7 +122,7 @@ binance.check.credentials <- function(){
     status_code = status_code$msg
     
     if(!is.null(status_code)){
-      warning("Set keys using binance.set.credentials()") 
+      warning(paste0(status_code, "Set keys using binance.set.credentials()")) 
       status = 0
     }
   }
@@ -134,6 +134,7 @@ binance.query = function(domain = "https://api.binance.com", endpoint, method = 
   
   if (exists('used_weight')) {
     if (used_weight > 1159) {
+      cat('\nI need a break\n')
       Sys.sleep(61 - as.integer(format(Sys.time(), "%S")))
     }
   }
@@ -203,12 +204,12 @@ get.binance.wallet = function(){
   
   res = res[Free + Locked + Freeze > 0]
   
-  return(res)
+  return(res[])
 }
 
 
 get.binance.deposits = function(startTime = NULL){
-  depos = binance.query(endpoint = "/sapi/v1/capital/deposit/hisrec", sign = T, params = list(start = startTime)) %>%
+  depos = binance.query(endpoint = "/sapi/v1/capital/deposit/hisrec", sign = T, params = list(startTime = startTime)) %>%
     content("text") %>% 
     fromJSON() 
   
@@ -216,7 +217,7 @@ get.binance.deposits = function(startTime = NULL){
 }
 
 get.binance.withdraws = function(startTime = NULL){
-  withs = binance.query(endpoint = "/sapi/v1/capital/withdraw/history", sign = T, params = list(start = startTime)) %>%
+  withs = binance.query(endpoint = "/sapi/v1/capital/withdraw/history", sign = T, params = list(startTime = startTime)) %>%
     content("text") %>% 
     fromJSON() 
   
@@ -254,9 +255,63 @@ get.binance.fiat.hist <- function(transaction = 0, startTime = NULL){
 
 
 # Only by each symbol... it takes much time to download all data.
-get.binance.orders <- function(){
+get.binance.orders <- function(symbol, startTime = NULL, endTime = NULL){
+  orders = binance.query(endpoint = "/api/v3/allOrders", sign = T,
+                        params = list(symbol = symbol,
+                                      startTime = as.character(round(as.numeric(strptime(x = paste0(startTime," 00:00:01"),
+                                                                             format = "%Y-%m-%d %H:%M:%S"))) * 1e3))) %>%
+    content("text") %>%
+    fromJSON() %>% 
+    data.table()
+
   
+    numcols = c("price", "origQty", "executedQty", "cummulativeQuoteQty", "stopPrice", "icebergQty", "origQuoteOrderQty")
+  
+    
+  if(length(orders) > 0){
+  
+    if(ncol(orders) == 1){
+      orders = NULL
+    }else{
+      orders[, (numcols) := lapply(.SD, as.numeric), .SDcols = numcols]
+      
+      orders[, time := as.POSIXct(time/1e3, tz = "GMT", origin = "1970-01-01")]
+      orders[, updateTime := as.POSIXct(updateTime/1e3, tz = "GMT", origin = "1970-01-01")]
+      
+    }
+  }
+  
+  return(orders[])
 }
+
+get.binance.trades <- function(symbol, startTime = NULL, endTime = NULL){
+  orders = binance.query(endpoint = "/api/v3/myTrades", sign = T,
+                         params = list(symbol = symbol,
+                                       startTime = as.character(round(as.numeric(strptime(x = paste0(startTime," 00:00:01"),
+                                                                                          format = "%Y-%m-%d %H:%M:%S"))) * 1e3))) %>%
+    content("text") %>%
+    fromJSON() %>% 
+    data.table()
+  
+  
+  numcols = c("price", "qty", "quoteQty", "commission")
+  
+  
+  if(length(orders) > 0){
+    
+    if(ncol(orders) == 1){
+      orders = NULL
+    }else{
+      orders[, (numcols) := lapply(.SD, as.numeric), .SDcols = numcols]
+      
+      orders[, time := as.POSIXct(time/1e3, tz = "GMT", origin = "1970-01-01")]
+
+    }
+  }
+  
+  return(orders[])
+}
+
 
 # Use this function to dowload all historical data on one symbol, .
 get.binance.klines <- function(symbol, inter = "1d"){
