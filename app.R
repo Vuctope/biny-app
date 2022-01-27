@@ -1,3 +1,6 @@
+#Warning in binance.check.credentials() :
+# Timestamp for this request was 1000ms ahead of the server's time.Set keys using binance.set.credentials()
+# WHEN THIS MESSAGE SHOWS, JUST SYNC COMPUTER TIME
 library(DBI)
 library(ggplot2)
 library(plotly)
@@ -13,18 +16,21 @@ library(shinydashboard)
 library(shinydashboardPlus)
 library(DT)
 library(digest)
+library(callr) #function for running another R session
 # library(Rcpp)
 
 options(scipen = 30, digits = 10)
 
 source("data_prep.R")
 source("API gets.R")
-source("DB_gets.R")
+# source("DB_gets.R")
 source("renders.R")
 
 # Read all data - for testing reasons before defining UI
 coin = "USDT"
 fiats = list.fiats()
+# transactions = prep.transaction.history(transactions = get.history.for.pairs(type = "trade"))
+transactions = readRDS("just_temporary_trans.rds")
 
 
 ui <- fluidPage(
@@ -134,9 +140,9 @@ server <- function(input, output, session) {
     
     observeEvent(rvUpdate(), {
         if(rvStatus() == 1){
-            rvActual(get.binance.actual.prices())
-            rvTrans(get.transactions(id = Sys.getenv("BIN_PRV_KEY")))
             
+            rvActual(get.binance.actual.prices())
+            rvTrans(transactions)
             rvWallet$wallet = prep.wallet(wallet = get.binance.wallet(),
                                           transactions = rvTrans(),
                                           actual = rvActual(),
@@ -148,11 +154,10 @@ server <- function(input, output, session) {
             
             fiat_status = sum(rvWallet$fiat_history[side == "Deposit"]$amount) - sum(rvWallet$fiat_history[side == "Withdraw"]$amount)
             
-            
             output$boxEurIn <- renderVB(value = fiat_status,
                                         subtitle = "EUR invested",
                                         icon = icon("euro-sign"))
-            output$boxDolIn <- renderVB(value = sum(rvTrans()[executed_coin == "EUR" & amount_coin %in% c("USDT", "BUSD")]$amount),
+            output$boxDolIn <- renderVB(value = sum(rvTrans()[Executed_COIN == "EUR" & Amount_COIN %in% c("USDT", "BUSD")]$Amount),
                                         subtitle = "UDST/BUSD invested",
                                         icon = icon("dollar-sign"))
             
@@ -176,9 +181,7 @@ server <- function(input, output, session) {
     
     
     # tabCoin
-    
-    
-    
+
     # observeEvent(eventExpr = input$slctPair, {
     #     rvPair$pair <- input$slctPair
     #     rvPair$pairHist <- read.historical.data(pair = input$slctPair)
