@@ -179,7 +179,7 @@ get.binance.actual.prices = function(){
   
   # Choose list's element with 'data' and change to data.table()
   latest_price_data = data.table(Pair = latest_price_json$symbol, actPrice = as.numeric(latest_price_json$price))
-  
+  return(latest_price_data[])
 }
 
 
@@ -314,20 +314,71 @@ get.binance.trades <- function(symbol, startTime = NULL, endTime = NULL){
 
 
 # Use this function to dowload all historical data on one symbol, .
-get.binance.klines <- function(symbol, inter = "1d"){
+get.binance.klines <- function(symbol, inter = "1d", limit = 1000){
   
   klines = binance.query(endpoint = "/api/v3/klines", sign = F,
                          params = list(symbol = symbol,
-                                       interval = inter))%>%
+                                       interval = inter,
+                                       limit = limit))%>%
     content("text") %>% 
     fromJSON() 
   
   klines <- data.table(klines)
-  return(klines)
+  
+ 
+  
+  if(length(klines) > 0){
+    
+    if(ncol(klines) == 1){
+      klines = NULL
+    }else{
+      setnames(klines,
+               old = names(klines),
+               new = c("Open_time", "Open", "High", "Low", "Close", "Volume", "Close_time",
+                       "Quote_asset_volume", "n_of_trades","taker_buy_base_asset_vol", "taker_buy_quote_asset_vol", "something"))
+      
+      numcols = c("Open_time", "Open", "High", "Low", "Close", "Volume", "Close_time",
+                  "Quote_asset_volume", "n_of_trades","taker_buy_base_asset_vol", "taker_buy_quote_asset_vol", "something")
+      
+      klines[, (numcols) := lapply(.SD, as.numeric), .SDcols = numcols]
+      
+      klines[, Open_time := as.POSIXct(Open_time/1e3, tz = "GMT", origin = "1970-01-01")]
+      klines[, Close_time := as.POSIXct(Close_time/1e3, tz = "GMT", origin = "1970-01-01")]
+      
+    }
+  }
+ 
+  return(klines[])
 }
 
-
-
+# Only flexible savings...
+get.binance.savings <- function(){
+  savings = binance.query(endpoint = "/sapi/v1/lending/union/account", sign = T,
+                         params = list()) %>%
+    content("text") %>%
+    fromJSON() %>% 
+    data.table()
+  
+  
+  numcols = c("price", "origQty", "executedQty", "cummulativeQuoteQty", "stopPrice", "icebergQty", "origQuoteOrderQty")
+  
+  
+  # if(length(orders) > 0){
+  #   
+  #   if(ncol(orders) == 1){
+  #     orders = NULL
+  #   }else{
+  #     orders[, (numcols) := lapply(.SD, as.numeric), .SDcols = numcols]
+  #     
+  #     orders[, time := as.POSIXct(time/1e3, tz = "GMT", origin = "1970-01-01")]
+  #     orders[, updateTime := as.POSIXct(updateTime/1e3, tz = "GMT", origin = "1970-01-01")]
+  #     
+  #   }
+  # }
+  # 
+  # return(orders[])
+  
+}
 
 
 #' Downloading current exchange rates

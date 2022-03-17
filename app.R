@@ -1,6 +1,12 @@
 #Warning in binance.check.credentials() :
 # Timestamp for this request was 1000ms ahead of the server's time.Set keys using binance.set.credentials()
 # WHEN THIS MESSAGE SHOWS, JUST SYNC COMPUTER TIME
+#
+# To add: difference between what was bought and what is in wallet - these are assets that are on other accounts/wallets
+# the only thing is that i cannot count how much profit it gives
+
+
+
 library(DBI)
 library(ggplot2)
 library(plotly)
@@ -29,8 +35,10 @@ source("renders.R")
 # Read all data - for testing reasons before defining UI
 coin = "USDT"
 fiats = list.fiats()
-# transactions = prep.transaction.history(transactions = get.history.for.pairs(type = "trade"))
-transactions = readRDS("just_temporary_trans.rds")
+#transactions = prep.transaction.history(transactions = get.history.for.pairs(type = "trade"))
+if(file.exists("latest_trans_data.rds")){
+    transactions = readRDS("latest_trans_data.rds")
+}
 
 
 ui <- fluidPage(
@@ -46,7 +54,7 @@ ui <- fluidPage(
             sidebarMenu(
                 menuItem("Wallet", tabName = "tabWallet", icon = icon("wallet")),
                 menuItem("Transactions", tabName = "tabTrans", icon = icon("exchange-alt")),
-                menuItem("Coin", tabName = "tabCoin", icon = icon("search-dollar"))
+                menuItem("Inspect Pair", tabName = "tabCoin", icon = icon("search-dollar"))
             )
         ),
         
@@ -68,9 +76,11 @@ ui <- fluidPage(
                         fluidRow(DTOutput(outputId = "tblTrans"), width = 12)
                 ),
                 tabItem(tabName = "tabCoin",
+                        fluidRow(
+                            uiOutput(outputId = 'slctPairUi')
+                        ),
                         # fluidRow(
-                        #     box(selectizeInput(inputId = "slctPair", label = "Select Pair",
-                        #                        choices = sort(unique(trHist$pair)), selected = "ETHUSDT"))
+                        
                         # ),
                         fluidRow(
                             box(plotlyOutput(outputId = "pltPairHist"))
@@ -95,7 +105,7 @@ server <- function(input, output, session) {
     rvWallet <- reactiveValues(wallet = NULL,
                                fiats = NULL,
                                fiat_history = NULL)
-    rvPair <- reactiveValues(pair = NULL, pairHist = NULL, transHist = NULL, transHistTab = NULL)
+    rvPair <- reactiveValues(pair = NULL, pairHist = NULL, transHist = NULL)
     
     # Show modal to add credentials
     showModal(modalDialog(
@@ -142,7 +152,13 @@ server <- function(input, output, session) {
         if(rvStatus() == 1){
             
             rvActual(get.binance.actual.prices())
-            rvTrans(transactions)
+            rvTrans({
+                if(exists("transactions")){
+                    transactions
+                }else{
+                    prep.transaction.history(transactions = get.history.for.pairs(type = "trade"))
+                }
+            })
             rvWallet$wallet = prep.wallet(wallet = get.binance.wallet(),
                                           transactions = rvTrans(),
                                           actual = rvActual(),
@@ -152,9 +168,9 @@ server <- function(input, output, session) {
             
             cat("No. of updates:", input$btnUpdate,"\n")
             
-            fiat_status = sum(rvWallet$fiat_history[side == "Deposit"]$amount) - sum(rvWallet$fiat_history[side == "Withdraw"]$amount)
+            fiat_status = sum(rvWallet$fiat_history[side == "Deposit" &  status == "Successful"]$amount) - sum(rvWallet$fiat_history[side == "Withdraw" & status == "Successful"]$amount)
             
-            output$boxEurIn <- renderVB(value = fiat_status,
+            output$boxEurIn <- renderVB(value = paste0(fiat_status, " (", rvWallet$wallet[Symbol == "EUR"]$Bal, " in Wallet)"),
                                         subtitle = "EUR invested",
                                         icon = icon("euro-sign"))
             output$boxDolIn <- renderVB(value = sum(rvTrans()[Executed_COIN == "EUR" & Amount_COIN %in% c("USDT", "BUSD")]$Amount),
@@ -174,32 +190,48 @@ server <- function(input, output, session) {
     # tabTrans
     observeEvent(rvUpdate(), {
         if(rvStatus() == 1){
-        output$tblTrans <- renderOwnDT({prep.transactions(rvTrans())})
+            output$tblTrans <- renderOwnDT({prep.transactions(rvTrans())})
         }
     })
     
     
     
-    # tabCoin
-
-    # observeEvent(eventExpr = input$slctPair, {
-    #     rvPair$pair <- input$slctPair
-    #     rvPair$pairHist <- read.historical.data(pair = input$slctPair)
-    #     rvPair$transHist <- trHist[pair == input$slctPair]
-    #     rvPair$transHistTab <- prep.transactions(trHist[Pair == input$slctPair])
-    # })
-    # 
-    # isolate(output$pltPairHist <- renderPlotly({
-    #     cat("Plot of", rvPair$pair, "\n")
-    #     plot.transactions(transactions = rvPair$transHist,
-    #                       pair_history = rvPair$pairHist)
-    # }))
-    # 
-    # 
-    # output$tblTransPair <- renderOwnDT({rvPair$transHistTab})
+    # tabPair
     
+    
+    observeEvent(eventExpr = input$slctPair, {
+        rvPair$pair <- input$slctPair
+        rvPair$pairHist <- get.binance.klines(symbol = input$slctPair)
+        rvPair$transHist <- rvTrans()[Pair == input$slctPair]
+        
+    })
+    
+    output$slctPairUi <- renderUI({
+        box(selectizeInput(inputId = "slctPair", label = "Select Pair",
+                           choices = sort(unique(rvTrans()$Pair)), selected = "ETHUSDT"))
+    })
+    
+    observeEvent(rvPair, {
+        output$pltPairHist <- renderPlotly({
+            cat("Plot of", rvPair$pair, "\n")
+            plot.transactions(transactions = rvPair$transHist,
+                              pair_history = rvPair$pairHist)
+        })
+    })
+    # 
+    # 
+    # output$tblTransPair <- renderOwnDT({rvPair$transHist})
+    # onStop(function() {
+    #     cat("Stopping app")
+    #     saveRDS(rvTrans(), "latest_trans_data.rds")
+    # })
     
 }
 
+# onStart = function() {
+#     cat("Doing application setup\n")
+#     
+#    
+# }
 # Run the application 
 shinyApp(ui = ui, server = server)

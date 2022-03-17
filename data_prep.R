@@ -233,28 +233,34 @@ prep.transactions <- function(transactions){
                                   Side,
                                   Executed,
                                   Price = sprintf("%f (fee: %f%s)", Amount, Fee, Fee_COIN),
-                                  AvgPrice = Price)]
+                                  AvgPrice = Price)][order(-Date)]
   return(crypto_trans[])
 }
 
 
-
+c("Open_time", "Open", "High", "Low", "Close", "Volume", "Close_time",
+  "Quote_asset_volume", "n_of_trades","taker_buy_base_asset_vol", "taker_buy_quote_asset_vol", "something")
 # Plot transactions in time
-# TODO: Pomyslec, czy powinienem tutaj dawac coin czy pair? jesli kupie za eth, to oddzielnie? czy przeliczenie na usd po kursie w danym dniu? Jesli po kursie, to po ktorym?
-plot.transactions <- function(transactions, pair_history, interval = "d"){
+plot.transactions <- function(transactions = NULL, pair_history = NULL, interval = "d"){
   
-  tr.plot <- plot_ly(pair_history, x = ~as.Date(Open), type="candlestick", name = "",
-                     open = ~Open, close = ~Close,
-                     high = ~High, low = ~Low)
-  tr.plot <- add_trace(tr.plot, data = transactions[side == "SELL"], x = ~as.Date(date), y = ~price,  size = ~executed, color = I("red"),
-                       inherit = F,  mode = 'markers', name = "SELL", text = ~paste("Price: ", price, '<br>Executed:', executed))
-  tr.plot <- add_trace(tr.plot, data = transactions[side == "BUY"], x = ~as.Date(date), y = ~price,  size = ~executed, color = I("green"),
-                       inherit = F,  mode = 'markers', name = "BUY", text = ~paste("Price: ", price, '<br>Executed:', executed))
-  tr.plot = layout(tr.plot,
-                   xaxis = list(rangeslider = list(visible = F), title = "Date"),
-                   yaxis = list(title = "Price"),
-                   showlegend = F)
-  tr.plot
+  if(is.null(pair_history)){
+    tr.plot <- NULL
+  }else{
+    tr.plot <- plot_ly(pair_history, x = ~as.Date(Open_time), type="candlestick", name = "",
+                       open = ~Open, close = ~Close,
+                       high = ~High, low = ~Low)
+    tr.plot <- add_trace(tr.plot, data = transactions[Side == "SELL"], x = ~as.Date(Date), y = ~Price,  size = ~Executed, color = I("red"),
+                         inherit = F,  mode = 'markers', name = "SELL", text = ~paste("Price: ", Price, '<br>Executed:', Executed))
+    tr.plot <- add_trace(tr.plot, data = transactions[Side == "BUY"], x = ~as.Date(Date), y = ~Price,  size = ~Executed, color = I("green"),
+                         inherit = F,  mode = 'markers', name = "BUY", text = ~paste("Price: ", Price, '<br>Executed:', Executed))
+    tr.plot = layout(tr.plot,
+                     xaxis = list(rangeslider = list(visible = F), title = "Date"),
+                     yaxis = list(title = "Price"),
+                     showlegend = F)
+  }
+  
+  
+  return(tr.plot)
   
 }
 
